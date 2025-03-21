@@ -1,0 +1,30 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: customer-data-sync
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.type.mapping: customer:com.example.customerdatasync.model.Customer
+
+app:
+  customer-service:
+    url: http://localhost:8081/api/v1/customer
+    connect-timeout: 5000
+    read-timeout: 5000
+  scheduler:
+    customer-sync-cron: "0 0 0 * * ?" # Run at midnight every day
+    enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /api-docs 
