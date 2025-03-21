@@ -6,28 +6,37 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.client.RestClientException;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.core.publisher.Mono;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CustomerServiceClientTest {
 
     @Mock
-    private RestTemplate restTemplate;
+    private WebClient webClient;
+
+    @Mock
+    private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
+
+    @Mock
+    private WebClient.RequestHeadersSpec requestHeadersSpec;
+
+    @Mock
+    private WebClient.ResponseSpec responseSpec;
 
     @InjectMocks
     private CustomerServiceClient customerServiceClient;
@@ -37,6 +46,11 @@ class CustomerServiceClientTest {
     @BeforeEach
     void setUp() {
         ReflectionTestUtils.setField(customerServiceClient, "customerServiceUrl", customerServiceUrl);
+        
+        // Setup WebClient mock chain
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
     }
 
     @Test
@@ -46,13 +60,8 @@ class CustomerServiceClientTest {
         Customer customer2 = Customer.builder().id(2L).name("Jane Doe").email("jane@example.com").build();
         List<Customer> expectedCustomers = Arrays.asList(customer1, customer2);
 
-        ResponseEntity<List<Customer>> responseEntity = new ResponseEntity<>(expectedCustomers, HttpStatus.OK);
-        when(restTemplate.exchange(
-                eq(customerServiceUrl),
-                eq(HttpMethod.GET),
-                isNull(),
-                any(ParameterizedTypeReference.class)))
-                .thenReturn(responseEntity);
+        when(responseSpec.bodyToMono(any(ParameterizedTypeReference.class)))
+                .thenReturn(Mono.just(expectedCustomers));
 
         // Act
         List<Customer> actualCustomers = customerServiceClient.getCustomers();
@@ -66,13 +75,8 @@ class CustomerServiceClientTest {
     @Test
     void getCustomers_shouldReturnEmptyList_whenServiceReturnsEmptyList() {
         // Arrange
-        ResponseEntity<List<Customer>> responseEntity = new ResponseEntity<>(Collections.emptyList(), HttpStatus.OK);
-        when(restTemplate.exchange(
-                eq(customerServiceUrl),
-                eq(HttpMethod.GET),
-                isNull(),
-                any(ParameterizedTypeReference.class)))
-                .thenReturn(responseEntity);
+        when(responseSpec.bodyToMono(any(ParameterizedTypeReference.class)))
+                .thenReturn(Mono.just(Collections.emptyList()));
 
         // Act
         List<Customer> actualCustomers = customerServiceClient.getCustomers();
@@ -83,14 +87,25 @@ class CustomerServiceClientTest {
     }
 
     @Test
-    void getCustomers_shouldReturnEmptyList_whenServiceThrowsException() {
+    void getCustomers_shouldReturnEmptyList_whenServiceThrowsWebClientResponseException() {
         // Arrange
-        when(restTemplate.exchange(
-                eq(customerServiceUrl),
-                eq(HttpMethod.GET),
-                isNull(),
-                any(ParameterizedTypeReference.class)))
-                .thenThrow(new RestClientException("Service unavailable"));
+        WebClientResponseException exception = Mockito.mock(WebClientResponseException.class);
+        when(responseSpec.bodyToMono(any(ParameterizedTypeReference.class)))
+                .thenReturn(Mono.error(exception));
+
+        // Act
+        List<Customer> actualCustomers = customerServiceClient.getCustomers();
+
+        // Assert
+        assertThat(actualCustomers).isNotNull();
+        assertThat(actualCustomers).isEmpty();
+    }
+
+    @Test
+    void getCustomers_shouldReturnEmptyList_whenServiceThrowsGenericException() {
+        // Arrange
+        when(responseSpec.bodyToMono(any(ParameterizedTypeReference.class)))
+                .thenReturn(Mono.error(new RuntimeException("Service unavailable")));
 
         // Act
         List<Customer> actualCustomers = customerServiceClient.getCustomers();
