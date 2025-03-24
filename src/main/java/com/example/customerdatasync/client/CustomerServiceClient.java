@@ -25,7 +25,9 @@ public class CustomerServiceClient {
     public List<Customer> getCustomers() {
         try {
             log.info("Fetching customers from {}", customerServiceUrl);
-            List<Customer> customers = webClient.get()
+            List<Customer> customers = webClient.mutate()
+                    .build()
+                    .get()
                     .uri(customerServiceUrl)
                     .retrieve()
                     .bodyToMono(new ParameterizedTypeReference<List<Customer>>() {})

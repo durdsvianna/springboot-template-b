@@ -30,6 +30,12 @@ class CustomerServiceClientTest {
     private WebClient webClient;
 
     @Mock
+    private WebClient.Builder webClientBuilder;
+
+    @Mock
+    private WebClient webClientMutated;
+
+    @Mock
     private WebClient.RequestHeadersUriSpec requestHeadersUriSpec;
 
     @Mock
@@ -47,8 +53,10 @@ class CustomerServiceClientTest {
     void setUp() {
         ReflectionTestUtils.setField(customerServiceClient, "customerServiceUrl", customerServiceUrl);
         
-        // Setup WebClient mock chain
-        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        // Setup WebClient mock chain for mutate() pattern
+        when(webClient.mutate()).thenReturn(webClientBuilder);
+        when(webClientBuilder.build()).thenReturn(webClientMutated);
+        when(webClientMutated.get()).thenReturn(requestHeadersUriSpec);
         when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
     }
