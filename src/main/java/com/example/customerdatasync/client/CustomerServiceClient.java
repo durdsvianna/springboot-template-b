@@ -25,7 +25,6 @@ public class CustomerServiceClient {
     public List<Customer> getCustomers() {
         try {
             log.info("Fetching customers from {}", customerServiceUrl);
-            
             List<Customer> customers = webClient.get()
                     .uri(customerServiceUrl)
                     .retrieve()
