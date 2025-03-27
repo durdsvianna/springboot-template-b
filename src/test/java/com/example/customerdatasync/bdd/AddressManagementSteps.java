@@ -10,18 +10,22 @@ import com.example.customerdatasync.repository.StateRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.cucumber.java.Before;
+import io.cucumber.java.BeforeStep;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -30,7 +34,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
-@Transactional
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 public class AddressManagementSteps {
 
     @Autowired
@@ -50,10 +54,9 @@ public class AddressManagementSteps {
     private State savedState;
     private Address savedAddress;
 
-    @Before
+    @BeforeStep
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void setup() {
-        addressRepository.deleteAll();
-        
         // Ensure SP state exists
         if (stateRepository.findById("SP").isEmpty()) {
             savedState = stateRepository.save(new State("SP", "São Paulo"));
@@ -74,7 +77,11 @@ public class AddressManagementSteps {
     }
 
     @Given("that there is an address registered with ID {string}")
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void thatThereIsAnAddressRegisteredWithID(String id) {
+        // First clean up any existing addresses to avoid conflicts
+        addressRepository.deleteAll();
+        
         Address address = Address.builder()
                 .street("Avenida Paulista, 1000")
                 .complement("Apt 123")
@@ -87,7 +94,11 @@ public class AddressManagementSteps {
     }
 
     @Given("that there are addresses registered for the State {string}")
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void thatThereAreAddressesRegisteredForTheState(String stateCode) {
+        // First clean up any existing addresses to avoid conflicts
+        addressRepository.deleteAll();
+        
         State state = stateRepository.findById(stateCode)
                 .orElseThrow(() -> new IllegalStateException("State not found: " + stateCode));
         
@@ -118,14 +129,20 @@ public class AddressManagementSteps {
 
     @When("I send a POST request to {string} with the address data")
     public void iSendAPOSTRequestToWithTheAddressData(String endpoint) throws Exception {
-        resultActions = mockMvc.perform(post("/api" + endpoint)
+        resultActions = mockMvc.perform(post(endpoint)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(addressRequestDto)));
     }
 
     @When("I send a GET request to {string}")
     public void iSendAGETRequestTo(String endpoint) throws Exception {
-        resultActions = mockMvc.perform(get("/api" + endpoint));
+        // Replace the literal "1" with the actual saved ID if the endpoint contains "addresses/"
+        if (endpoint.contains("/addresses/") && !endpoint.contains("/state/")) {
+            String modifiedEndpoint = endpoint.replace("/addresses/1", "/addresses/" + savedAddress.getId());
+            resultActions = mockMvc.perform(get(modifiedEndpoint));
+        } else {
+            resultActions = mockMvc.perform(get(endpoint));
+        }
     }
 
     @When("I send a PUT request to {string} with updated data")
@@ -138,14 +155,20 @@ public class AddressManagementSteps {
                 "SP"
         );
         
-        resultActions = mockMvc.perform(put("/api" + endpoint)
+        // Replace the literal "1" with the actual saved ID
+        String modifiedEndpoint = endpoint.replace("/addresses/1", "/addresses/" + savedAddress.getId());
+        
+        resultActions = mockMvc.perform(put(modifiedEndpoint)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(updatedAddress)));
     }
 
     @When("I send a DELETE request to {string}")
     public void iSendADELETERequestTo(String endpoint) throws Exception {
-        resultActions = mockMvc.perform(delete("/api" + endpoint));
+        // Replace the literal "1" with the actual saved ID
+        String modifiedEndpoint = endpoint.replace("/addresses/1", "/addresses/" + savedAddress.getId());
+        
+        resultActions = mockMvc.perform(delete(modifiedEndpoint));
     }
 
     @Then("the system should return status {int} \\(CREATED)")
@@ -204,9 +227,12 @@ public class AddressManagementSteps {
                 .andReturn();
 
         String content = mvcResult.getResponse().getContentAsString();
-        List<AddressResponseDto> addresses = objectMapper.readValue(content, new TypeReference<List<AddressResponseDto>>() {});
+        List<Map<String, Object>> addresses = objectMapper.readValue(content, new TypeReference<List<Map<String, Object>>>() {});
         
-        assertThat(addresses, everyItem(hasProperty("state", hasProperty("stateCode", equalTo("SP")))));
+        for (Map<String, Object> address : addresses) {
+            Map<String, Object> state = (Map<String, Object>) address.get("state");
+            assertThat(state.get("stateCode"), equalTo("SP"));
+        }
     }
 
     @Then("return a list with all {int} States of Brazil")
@@ -217,11 +243,22 @@ public class AddressManagementSteps {
                 .andReturn();
 
         String content = mvcResult.getResponse().getContentAsString();
-        List<StateDto> states = objectMapper.readValue(content, new TypeReference<List<StateDto>>() {});
+        List<Map<String, Object>> states = objectMapper.readValue(content, new TypeReference<List<Map<String, Object>>>() {});
         
         // Check a few states to ensure they are in the list
-        assertThat(states, hasItem(hasProperty("stateCode", equalTo("SP"))));
-        assertThat(states, hasItem(hasProperty("stateCode", equalTo("RJ"))));
-        assertThat(states, hasItem(hasProperty("stateCode", equalTo("MG"))));
+        boolean hasSP = false;
+        boolean hasRJ = false;
+        boolean hasMG = false;
+        
+        for (Map<String, Object> state : states) {
+            String code = (String) state.get("stateCode");
+            if ("SP".equals(code)) hasSP = true;
+            if ("RJ".equals(code)) hasRJ = true;
+            if ("MG".equals(code)) hasMG = true;
+        }
+        
+        assertThat("Should have SP state", hasSP);
+        assertThat("Should have RJ state", hasRJ);
+        assertThat("Should have MG state", hasMG);
     }
 } 
