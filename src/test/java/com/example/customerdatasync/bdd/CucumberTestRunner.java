@@ -14,5 +14,5 @@ import static io.cucumber.junit.platform.engine.Constants.PLUGIN_PROPERTY_NAME;
 @ConfigurationParameter(key = GLUE_PROPERTY_NAME, value = "com.example.customerdatasync.bdd")
 @ConfigurationParameter(key = PLUGIN_PROPERTY_NAME, value = "pretty")
 public class CucumberTestRunner {
-    // This class is just a runner for Cucumber tests
+    // This class is used as a hook for Cucumber to run the BDD tests
 } 

@@ -4,11 +4,13 @@ import com.example.customerdatasync.client.CustomerServiceClient;
 import com.example.customerdatasync.model.Customer;
 import com.example.customerdatasync.service.CustomerSyncService;
 import com.example.customerdatasync.service.KafkaPublisherService;
+import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
-import io.cucumber.spring.CucumberContextConfiguration;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.ActiveProfiles;
@@ -17,10 +19,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
-@CucumberContextConfiguration
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureMockMvc
 @ActiveProfiles("test")
 public class CucumberStepDefinitions {
 
@@ -35,6 +38,20 @@ public class CucumberStepDefinitions {
 
     private List<Customer> testCustomers;
     private Exception thrownException;
+    
+    @Before
+    public void setup() {
+        // Don't try to reset null mocks
+        if (customerServiceClient != null) {
+            Mockito.reset(customerServiceClient);
+        }
+        
+        if (kafkaPublisherService != null) {
+            Mockito.reset(kafkaPublisherService);
+        }
+        
+        thrownException = null;
+    }
 
     @Given("the external customer service is available")
     public void theExternalCustomerServiceIsAvailable() {
@@ -83,7 +100,7 @@ public class CucumberStepDefinitions {
     @Then("the sync process should complete successfully")
     public void theSyncProcessShouldCompleteSuccessfully() {
         // If we got here without an exception, the test passes
-        assert thrownException == null;
+        assertThat(thrownException).isNull();
     }
 
     @Then("the system should log an error")
