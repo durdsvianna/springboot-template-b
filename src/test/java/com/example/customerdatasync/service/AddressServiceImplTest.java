@@ -4,6 +4,7 @@ import com.example.customerdatasync.dto.AddressRequestDto;
 import com.example.customerdatasync.dto.AddressResponseDto;
 import com.example.customerdatasync.dto.StateDto;
 import com.example.customerdatasync.exception.ResourceNotFoundException;
+import com.example.customerdatasync.exception.ServiceException;
 import com.example.customerdatasync.model.Address;
 import com.example.customerdatasync.model.State;
 import com.example.customerdatasync.repository.AddressRepository;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessException;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -89,6 +91,24 @@ class AddressServiceImplTest {
     }
 
     @Test
+    @DisplayName("Should throw ServiceException when creating address fails due to database error")
+    void createAddressWithDatabaseError() {
+        // Arrange
+        when(stateService.getStateByCode(anyString())).thenReturn(state);
+        when(addressRepository.save(any(Address.class))).thenThrow(mock(DataAccessException.class));
+        
+        // Act & Assert
+        ServiceException exception = assertThrows(
+                ServiceException.class,
+                () -> addressService.createAddress(addressRequestDto)
+        );
+        
+        assertTrue(exception.getMessage().contains("Failed to create address"));
+        verify(stateService).getStateByCode("SP");
+        verify(addressRepository).save(any(Address.class));
+    }
+
+    @Test
     @DisplayName("Should get address by ID successfully")
     void getAddressByIdSuccessfully() {
         // Arrange
@@ -120,6 +140,22 @@ class AddressServiceImplTest {
         
         assertEquals("Address not found with id : '999'", exception.getMessage());
         verify(addressRepository).findById(999L);
+    }
+
+    @Test
+    @DisplayName("Should throw ServiceException when getting address by ID fails unexpectedly")
+    void getAddressByIdWithUnexpectedError() {
+        // Arrange
+        when(addressRepository.findById(anyLong())).thenThrow(new RuntimeException("Unexpected error"));
+        
+        // Act & Assert
+        ServiceException exception = assertThrows(
+                ServiceException.class,
+                () -> addressService.getAddressById(1L)
+        );
+        
+        assertTrue(exception.getMessage().contains("Error retrieving address with ID: 1"));
+        verify(addressRepository).findById(1L);
     }
 
     @Test
@@ -163,6 +199,26 @@ class AddressServiceImplTest {
     }
 
     @Test
+    @DisplayName("Should throw ServiceException when updating address fails due to database error")
+    void updateAddressWithDatabaseError() {
+        // Arrange
+        when(addressRepository.findById(anyLong())).thenReturn(Optional.of(address));
+        when(stateService.getStateByCode(anyString())).thenReturn(state);
+        when(addressRepository.save(any(Address.class))).thenThrow(mock(DataAccessException.class));
+        
+        // Act & Assert
+        ServiceException exception = assertThrows(
+                ServiceException.class,
+                () -> addressService.updateAddress(1L, addressRequestDto)
+        );
+        
+        assertTrue(exception.getMessage().contains("Failed to update address with ID: 1"));
+        verify(addressRepository).findById(1L);
+        verify(stateService).getStateByCode("SP");
+        verify(addressRepository).save(any(Address.class));
+    }
+
+    @Test
     @DisplayName("Should delete address successfully")
     void deleteAddressSuccessfully() {
         // Arrange
@@ -192,6 +248,24 @@ class AddressServiceImplTest {
         assertEquals("Address not found with id : '999'", exception.getMessage());
         verify(addressRepository).findById(999L);
         verify(addressRepository, never()).delete(any(Address.class));
+    }
+
+    @Test
+    @DisplayName("Should throw ServiceException when deleting address fails due to database error")
+    void deleteAddressWithDatabaseError() {
+        // Arrange
+        when(addressRepository.findById(anyLong())).thenReturn(Optional.of(address));
+        doThrow(mock(DataAccessException.class)).when(addressRepository).delete(any(Address.class));
+        
+        // Act & Assert
+        ServiceException exception = assertThrows(
+                ServiceException.class,
+                () -> addressService.deleteAddress(1L)
+        );
+        
+        assertTrue(exception.getMessage().contains("Failed to delete address with ID: 1"));
+        verify(addressRepository).findById(1L);
+        verify(addressRepository).delete(address);
     }
 
     @Test
@@ -241,6 +315,24 @@ class AddressServiceImplTest {
         assertNotNull(result);
         assertTrue(result.isEmpty());
         
+        verify(stateService).getStateByCode("SP");
+        verify(addressRepository).findByState(state);
+    }
+
+    @Test
+    @DisplayName("Should throw ServiceException when getting addresses by state fails due to database error")
+    void getAddressesByStateWithDatabaseError() {
+        // Arrange
+        when(stateService.getStateByCode(anyString())).thenReturn(state);
+        when(addressRepository.findByState(any(State.class))).thenThrow(mock(DataAccessException.class));
+        
+        // Act & Assert
+        ServiceException exception = assertThrows(
+                ServiceException.class,
+                () -> addressService.getAddressesByState("SP")
+        );
+        
+        assertTrue(exception.getMessage().contains("Failed to retrieve addresses for state: SP"));
         verify(stateService).getStateByCode("SP");
         verify(addressRepository).findByState(state);
     }

@@ -1,39 +1,57 @@
 Feature: Address Management
-  As a system administrator
-  I want to manage addresses (include, query, update and delete)
-  To maintain an updated registry of locations in the system
+  As a user
+  I want to manage addresses
+  So that I can store and retrieve location information
 
-  Scenario: Register a new address successfully
-    Given that I have a valid address to register
-    When I send a POST request to "/addresses" with the address data
-    Then the system should return status 201 (CREATED)
-    And return the data of the registered address with the generated ID
+  Background:
+    Given the system has a state "SP" with name "São Paulo"
 
-  Scenario: Search for address by ID
-    Given that there is an address registered with ID "1"
-    When I send a GET request to "/addresses/1"
-    Then the system should return status 200 (OK)
-    And return the address data corresponding
+  Scenario: Successfully create a new address
+    When I create an address with the following details:
+      | street        | complement | zipCode  | city        | stateCode |
+      | Main Street   | Apt 101    | 12345678 | Springfield | SP        |
+    Then the address should be created successfully
+    And the address should have a formatted zip code "12345-678"
+    And the address should be associated with state "SP"
 
-  Scenario: Update existing address
-    Given that there is an address registered with ID "1"
-    When I send a PUT request to "/addresses/1" with updated data
-    Then the system should return status 200 (OK)
-    And return the updated address data
+  Scenario: Create address with non-existent state
+    When I create an address with state code "XX"
+    Then I should receive a resource not found error for address
+    And the address error message should contain "State not found"
 
-  Scenario: Delete existing address
-    Given that there is an address registered with ID "1"
-    When I send a DELETE request to "/addresses/1"
-    Then the system should return status 204 (NO CONTENT)
+  Scenario: Update an existing address
+    Given an address exists with ID "1"
+    When I update the address with the following details:
+      | street        | complement | zipCode  | city        | stateCode |
+      | New Street    | Apt 202    | 87654321 | Newtown     | SP        |
+    Then the address should be updated successfully
+    And the address should have the new street "New Street"
 
-  Scenario: Search for addresses by State
-    Given that there are addresses registered for the State "SP"
-    When I send a GET request to "/addresses/state/SP"
-    Then the system should return status 200 (OK)
-    And return a list with all addresses of this State
+  Scenario: Delete an existing address
+    Given an address exists with ID "1"
+    When I delete the address
+    Then the address should be deleted successfully
 
-  Scenario: List all States
-    Given that the system has all States of Brazil registered
-    When I send a GET request to "/ufs"
-    Then the system should return status 200 (OK)
-    And return a list with all 27 States of Brazil 
+  Scenario: Attempt to delete non-existent address
+    When I try to delete an address with ID "999"
+    Then I should receive a resource not found error for address
+    And the address error message should contain "Address not found"
+
+  Scenario: Get addresses by state
+    Given the following addresses exist for state "SP":
+      | id | street      | complement | zipCode    | city      |
+      | 1  | Street One  | Apt 101    | 12345-678  | City One  |
+      | 2  | Street Two  | Apt 202    | 23456-789  | City Two  |
+    When I request all addresses for state "SP"
+    Then I should receive 2 addresses
+    And all addresses should be in state "SP"
+
+  Scenario: Get addresses for state with no addresses
+    When I request all addresses for state "SP"
+    Then I should receive an empty list of addresses
+
+  Scenario: Database error while saving address
+    Given the database is experiencing issues for addresses
+    When I try to create a new address
+    Then I should receive a service error for address
+    And the address error message should contain "Failed to create address" 

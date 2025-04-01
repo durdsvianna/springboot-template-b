@@ -2,6 +2,7 @@ package com.example.customerdatasync.service;
 
 import com.example.customerdatasync.dto.StateDto;
 import com.example.customerdatasync.exception.ResourceNotFoundException;
+import com.example.customerdatasync.exception.ServiceException;
 import com.example.customerdatasync.model.State;
 import com.example.customerdatasync.repository.StateRepository;
 import com.example.customerdatasync.service.impl.StateServiceImpl;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataAccessException;
 
 import java.util.Arrays;
 import java.util.List;
@@ -70,6 +72,22 @@ class StateServiceImplTest {
         
         verify(stateRepository).findAll();
     }
+    
+    @Test
+    @DisplayName("Should throw ServiceException when getting all states fails due to database error")
+    void getAllStatesWithDatabaseError() {
+        // Arrange
+        when(stateRepository.findAll()).thenThrow(mock(DataAccessException.class));
+        
+        // Act & Assert
+        ServiceException exception = assertThrows(
+                ServiceException.class,
+                () -> stateService.getAllStates()
+        );
+        
+        assertTrue(exception.getMessage().contains("Failed to retrieve all states"));
+        verify(stateRepository).findAll();
+    }
 
     @Test
     @DisplayName("Should get state by code successfully")
@@ -95,10 +113,61 @@ class StateServiceImplTest {
         when(stateRepository.findById("XX")).thenReturn(Optional.empty());
 
         // Act & Assert
-        assertThrows(ResourceNotFoundException.class, () -> {
-            stateService.getStateByCode("XX");
-        });
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> stateService.getStateByCode("XX")
+        );
         
+        assertTrue(exception.getMessage().contains("State not found with stateCode"));
+        verify(stateRepository).findById("XX");
+    }
+    
+    @Test
+    @DisplayName("Should throw ServiceException when getting state by code fails due to database error")
+    void getStateByCodeWithDatabaseError() {
+        // Arrange
+        when(stateRepository.findById("SP")).thenThrow(mock(DataAccessException.class));
+        
+        // Act & Assert
+        ServiceException exception = assertThrows(
+                ServiceException.class,
+                () -> stateService.getStateByCode("SP")
+        );
+        
+        assertTrue(exception.getMessage().contains("Failed to retrieve state with code: SP"));
+        verify(stateRepository).findById("SP");
+    }
+    
+    @Test
+    @DisplayName("Should get state details successfully")
+    void getStateDetailsSuccessfully() {
+        // Arrange
+        when(stateRepository.findById("SP")).thenReturn(Optional.of(spState));
+        
+        // Act
+        StateDto result = stateService.getStateDetails("SP");
+        
+        // Assert
+        assertNotNull(result);
+        assertEquals("SP", result.stateCode());
+        assertEquals("São Paulo", result.name());
+        
+        verify(stateRepository).findById("SP");
+    }
+    
+    @Test
+    @DisplayName("Should throw ResourceNotFoundException when state details not found")
+    void getStateDetailsNotFound() {
+        // Arrange
+        when(stateRepository.findById("XX")).thenReturn(Optional.empty());
+        
+        // Act & Assert
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> stateService.getStateDetails("XX")
+        );
+        
+        assertTrue(exception.getMessage().contains("State not found with stateCode"));
         verify(stateRepository).findById("XX");
     }
 

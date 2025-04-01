@@ -8,4 +8,5 @@ import java.util.List;
 public interface StateService {
     List<StateDto> getAllStates();
     State getStateByCode(String stateCode);
+    StateDto getStateDetails(String stateCode);
 } 
